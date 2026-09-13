@@ -147,7 +147,9 @@ pub(crate) fn parse_range(source: &str, start: usize, end: usize) -> Option<Rang
         return Some(RangeKind::Markup(node));
     }
 
-    vermis::parse((&source.as_bytes()[start..end]).into())
+    let expression = format!("return {}", &source[start..end]);
+
+    vermis::parse(expression.as_bytes().into())
         .diagnostics
         .is_empty()
         .then_some(RangeKind::Luau)

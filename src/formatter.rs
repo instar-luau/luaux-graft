@@ -132,8 +132,13 @@ fn children_document(
 
         match child {
             Child::Text { .. }
-                if (child_index == 0 || child_index + 1 == children.len())
-                    && layout.source[span.start..span.end].trim().is_empty() =>
+                if layout.source[span.start..span.end].trim().is_empty()
+                    && (child_index == 0
+                        || child_index + 1 == children.len()
+                        || matches!(
+                            children.get(child_index.wrapping_sub(1)),
+                            Some(Child::Node(_))
+                        ) && matches!(children.get(child_index + 1), Some(Child::Node(_)))) =>
             {
                 continue;
             }
@@ -305,12 +310,6 @@ fn hole_document(layout: &Layout<'_>, span: Span) -> Document {
         Some(crate::source::RangeKind::Markup(node)) => node_document(layout, &node),
         Some(crate::source::RangeKind::Luau) => Document::expression(start, end),
         None => Document::source(start, end),
-    };
-
-    let body = if layout.source[start..end].contains('\n') {
-        Document::dedent(Document::dedent(body))
-    } else {
-        body
     };
 
     Document::concatenate([
