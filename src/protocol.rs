@@ -36,12 +36,12 @@ pub(crate) struct Format {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Document {
+    #[serde(rename = "empty")]
     Nil,
 
-    #[serde(rename = "src")]
     Source(u32, u32),
 
-    #[serde(rename = "lit")]
+    #[serde(rename = "text")]
     Literal(String),
 
     Line,
@@ -51,7 +51,7 @@ pub(crate) enum Document {
     Group(Box<Self>),
     Indent(Box<Self>),
 
-    #[serde(rename = "concat")]
+    #[serde(rename = "sequence")]
     Concatenate(Vec<Self>),
 
     Host {

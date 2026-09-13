@@ -84,37 +84,19 @@ fn main() -> ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use super::protocol::{Mapping, offset};
-
     #[test]
-    fn mappings_anchor_transformed_lines() {
-        let source = "-- 雪\r\nreturn <Frame />\n";
-        let generated = "-- 雪\r\nreturn React.createElement(\"Frame\")\n";
-        let mut source_lines = source.split_inclusive('\n');
-        let mut generated_lines = generated.split_inclusive('\n');
-        let mut source_start = 0;
-        let mut generated_start = 0;
-        let mut mappings = Vec::<Mapping>::new();
+    fn mappings_cover_original_lines() {
+        let mappings = super::compiler::mappings(
+            "-- 雪\r\nreturn <Frame />\n",
+            "-- 雪\r\nreturn React.createElement(\"Frame\")\n",
+        )
+        .unwrap();
 
-        while let (Some(original), Some(output)) = (source_lines.next(), generated_lines.next()) {
-            let generated_end = generated_start + output.len();
+        assert_eq!(mappings[0].original_end, "-- 雪\r\n".len());
 
-            mappings.push(Mapping {
-                start: generated_start,
-                end: generated_end,
-                original_start: source_start,
-                original_end: if original == output {
-                    source_start + original.len()
-                } else {
-                    source_start
-                },
-            });
-
-            source_start += original.len();
-            generated_start = generated_end;
-        }
-
-        assert_eq!(mappings[0].original_end, offset("-- 雪\r\n".len()) as usize);
-        assert_eq!(mappings[1].original_start, mappings[1].original_end);
+        assert_eq!(
+            mappings[1].original_end - mappings[1].original_start,
+            "return <Frame />\n".len()
+        );
     }
 }

@@ -38,19 +38,17 @@ def "main build" [
     mkdir $destination
     mkdir $staging
 
-    cp instar.toml ($staging | path join instar.toml)
+    cp graft.toml ($staging | path join graft.toml)
     cp --preserve [mode] ($build_directory | path join $source_binary) ($staging | path join $binary)
 
     try {
-        do {
-            cd $staging
+        cd $staging
 
-            if $windows {
-                let command = $"Compress-Archive -Path instar.toml,($binary) -DestinationPath '($archive)' -Force"
-                pwsh -NoProfile -Command $command
-            } else {
-                ^zip -q -r $archive instar.toml $binary
-            }
+        if $windows {
+            let command = $"Compress-Archive -Path graft.toml,($binary) -DestinationPath '($archive)' -Force"
+            pwsh -NoProfile -Command $command
+        } else {
+            ^zip -q -r $archive graft.toml $binary
         }
     } catch {|error| error make $error }
 

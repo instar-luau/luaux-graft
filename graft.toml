@@ -1,7 +1,7 @@
-[graft]
 name = "luaux"
 protocol = 1
 runtime = "native"
 format = true
 lint = true
 compile = true
+extensions = ["luaux"]

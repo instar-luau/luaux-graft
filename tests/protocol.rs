@@ -57,6 +57,7 @@ fn compiles_react_with_valid_protocol_and_mappings() {
         }
 
         let mut previous = 0;
+        let mut previous_original = 0;
 
         for mapping in result["mappings"].as_array().unwrap() {
             let start = usize::try_from(mapping["start"].as_u64().unwrap()).unwrap();
@@ -67,13 +68,17 @@ fn compiles_react_with_valid_protocol_and_mappings() {
 
             let original_end = usize::try_from(mapping["original_end"].as_u64().unwrap()).unwrap();
             assert_eq!(start, previous);
+            assert_eq!(original_start, previous_original);
             assert!(start < end);
+            assert!(original_start < original_end);
             assert!(generated.get(start..end).is_some());
             assert!(source.get(original_start..original_end).is_some());
             previous = end;
+            previous_original = original_end;
         }
 
         assert_eq!(previous, generated.len());
+        assert_eq!(previous_original, source.len());
     }
 }
 
@@ -153,7 +158,12 @@ fn formats_markup_with_the_layout_protocol() {
 
     let result: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(result["version"], 1);
-    assert!(result["document"].to_string().contains("Frame"));
+    let document = result["document"].to_string();
+    assert!(document.contains("Frame"));
+    assert!(document.contains("sequence"));
+    assert!(!document.contains("concat"));
+    assert!(!document.contains("src"));
+    assert!(!document.contains("lit"));
 }
 
 #[test]

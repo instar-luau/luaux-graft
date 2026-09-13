@@ -59,7 +59,7 @@ pub(crate) fn backend(configuration: &Config) -> Box<dyn Backend> {
     }
 }
 
-fn mappings(source: &str, generated: &str) -> io::Result<Vec<Mapping>> {
+pub(crate) fn mappings(source: &str, generated: &str) -> io::Result<Vec<Mapping>> {
     let mut original_lines = source.split_inclusive('\n');
     let mut generated_lines = generated.split_inclusive('\n');
     let mut original_start = 0;
@@ -75,11 +75,7 @@ fn mappings(source: &str, generated: &str) -> io::Result<Vec<Mapping>> {
                     start: generated_start,
                     end: generated_end,
                     original_start,
-                    original_end: if original == generated {
-                        original_start + original.len()
-                    } else {
-                        original_start
-                    },
+                    original_end: original_start + original.len(),
                 });
 
                 generated_start = generated_end;
