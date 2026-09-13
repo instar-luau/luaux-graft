@@ -1,0 +1,6 @@
+[graft]
+name = "luaux"
+version = "0.2.0"
+protocol = 1
+runtime = "native"
+compile = true

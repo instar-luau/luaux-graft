@@ -1,0 +1,36 @@
+[package]
+name = "luaux-graft"
+version = "0.2.0"
+edition = "2024"
+description = "Native LuauX compilation graft for Instar"
+repository = "https://github.com/instar-luau/instar"
+license = "MIT"
+keywords = ["formatter", "linter", "luau", "luaux", "roblox"]
+categories = ["compilers", "development-tools"]
+
+[dependencies]
+luaux = "0.2.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "1.1"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+cargo = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+clone_on_ref_ptr = "deny"
+
+[lints.rust]
+deprecated_safe = { level = "deny", priority = -1 }
+let_underscore = { level = "deny", priority = -1 }
+rust_2018_idioms = { level = "deny", priority = -1 }
+unsafe_code = "deny"
+unused = { level = "deny", priority = -1 }
+warnings = { level = "deny", priority = -1 }
+
+missing_docs = "deny"
+unreachable_pub = "deny"
+unsafe_op_in_unsafe_fn = "deny"

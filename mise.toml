@@ -1,0 +1,4 @@
+[tools]
+"aqua:tombi-toml/tombi" = "latest"
+"github:0hirume/breathers" = "latest"
+rust = { version = "nightly", profile = "minimal", components = ["rust-analyzer", "rustfmt", "clippy"] }
