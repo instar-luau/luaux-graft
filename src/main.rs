@@ -31,6 +31,29 @@ fn run() -> Result<(), Box<dyn Error>> {
 
     let request: Request = serde_json::from_slice(&input)?;
 
+    if source::luau_ranges(&request.source).is_err() {
+        let output = match request.hook.as_str() {
+            "compile" => serde_json::to_vec(&protocol::Compilation {
+                version: 1,
+                source: String::new(),
+                dependencies: Vec::new(),
+                mappings: Vec::new(),
+            })?,
+
+            "format" => serde_json::to_vec(&protocol::Format {
+                version: 1,
+                document: protocol::Document::source(0, request.source.len()),
+            })?,
+
+            "lint" => serde_json::to_vec(&Vec::<protocol::Finding>::new())?,
+            _ => return Err("unsupported graft hook".into()),
+        };
+
+        io::stdout().lock().write_all(&output)?;
+
+        return Ok(());
+    }
+
     let output = match request.hook.as_str() {
         "compile" => serde_json::to_vec(&compiler::compile(&request)?)?,
 
@@ -43,7 +66,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 
             serde_json::to_vec(&protocol::Format {
                 version: 1,
-                document: formatter::format(&request.source, options)?,
+                document: formatter::format(&request.source, options),
             })?
         }
 
@@ -52,9 +75,9 @@ fn run() -> Result<(), Box<dyn Error>> {
                 return Err("expected a protocol 1 lint request".into());
             }
 
-            let configuration = compiler::configuration(&request.configuration)?;
+            let configuration = compiler::configuration(&request)?;
 
-            serde_json::to_vec(&linter::lint(&request.source, &configuration)?)?
+            serde_json::to_vec(&linter::lint(&request.source, &configuration))?
         }
 
         _ => return Err("unsupported graft hook".into()),

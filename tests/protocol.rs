@@ -123,7 +123,6 @@ fn failures_leave_standard_output_empty() {
         invalid_version.to_string(),
         invalid_hook.to_string(),
         invalid_settings.to_string(),
-        request("return <Frame", &json!({})).to_string(),
         request("return 1", &json!({"unknown":true})).to_string(),
         request(
             "local React = require('@react')\nreturn <NonexistentClass />",
@@ -136,6 +135,17 @@ fn failures_leave_standard_output_empty() {
         assert_eq!(output.stdout, Vec::<u8>::new());
         assert_ne!(output.stderr, Vec::<u8>::new());
     }
+}
+
+#[test]
+fn malformed_source_returns_an_empty_compilation() {
+    let output = invoke(request("return <Frame", &json!({})).to_string().as_bytes());
+
+    assert!(output.status.success());
+
+    let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["source"], "");
+    assert_eq!(result["mappings"], json!([]));
 }
 
 #[test]

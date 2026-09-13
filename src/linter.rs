@@ -7,8 +7,11 @@ use luaux::{
     markup::{Attribute, AttributeValue, Child, Node},
 };
 
-pub(crate) fn lint(source: &str, configuration: &Config) -> Result<Vec<Finding>, String> {
-    let file = crate::source::parse(source)?;
+pub(crate) fn lint(source: &str, configuration: &Config) -> Vec<Finding> {
+    let Ok(file) = crate::source::parse(source) else {
+        return Vec::new();
+    };
+
     let mut findings = Vec::new();
 
     for node in file.markup_nodes() {
@@ -43,7 +46,7 @@ pub(crate) fn lint(source: &str, configuration: &Config) -> Result<Vec<Finding>,
 
     findings.sort_by_key(|finding| finding.start);
 
-    Ok(findings)
+    findings
 }
 
 fn check_node(source: &str, node: &Node, findings: &mut Vec<Finding>) {

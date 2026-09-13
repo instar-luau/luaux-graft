@@ -7,7 +7,7 @@ pub(crate) fn compile(request: &Request) -> Result<Compilation, Box<dyn Error>> 
         return Err("expected a protocol 1 compile request without formatter settings".into());
     }
 
-    let configuration = configuration(&request.configuration)?;
+    let configuration = configuration(request)?;
     let backend = backend(&configuration);
 
     let (source, warnings) = compile_configured(&request.source, backend.as_ref(), configuration)
@@ -40,16 +40,51 @@ pub(crate) fn compile(request: &Request) -> Result<Compilation, Box<dyn Error>> 
     })
 }
 
-pub(crate) fn configuration(
-    values: &BTreeMap<String, serde_json::Value>,
-) -> Result<Config, Box<dyn Error>> {
-    let (configuration, warnings) = Config::parse_reporting(&toml::to_string(values)?)?;
+pub(crate) fn configuration(request: &Request) -> Result<Config, Box<dyn Error>> {
+    let mut values = request
+        .path
+        .as_deref()
+        .and_then(std::path::Path::parent)
+        .and_then(|directory| {
+            directory
+                .ancestors()
+                .map(|ancestor| ancestor.join("luaux.toml"))
+                .find(|path| path.is_file())
+        })
+        .map(std::fs::read_to_string)
+        .transpose()?
+        .map(|source| toml::from_str::<BTreeMap<String, serde_json::Value>>(&source))
+        .transpose()?
+        .unwrap_or_default();
+
+    overlay(&mut values, request.configuration.clone());
+
+    let (configuration, warnings) = Config::parse_reporting(&toml::to_string(&values)?)?;
 
     for warning in warnings {
         eprintln!("warning: {warning}");
     }
 
     Ok(configuration)
+}
+
+fn overlay(
+    base: &mut BTreeMap<String, serde_json::Value>,
+    overlay: BTreeMap<String, serde_json::Value>,
+) {
+    for (name, value) in overlay {
+        match (base.get_mut(&name), value) {
+            (Some(serde_json::Value::Object(base)), serde_json::Value::Object(overlay)) => {
+                for (name, value) in overlay {
+                    base.insert(name, value);
+                }
+            }
+
+            (_, value) => {
+                base.insert(name, value);
+            }
+        }
+    }
 }
 
 pub(crate) fn backend(configuration: &Config) -> Box<dyn Backend> {

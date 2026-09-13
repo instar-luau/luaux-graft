@@ -11,8 +11,11 @@ struct Layout<'source> {
     options: FormatOptions,
 }
 
-pub(crate) fn format(source: &str, options: FormatOptions) -> Result<Document, String> {
-    let file = source::parse(source)?;
+pub(crate) fn format(source: &str, options: FormatOptions) -> Document {
+    let Ok(file) = source::parse(source) else {
+        return Document::source(0, source.len());
+    };
+
     let layout = Layout { source, options };
     let mut prefix = String::from("__luaux_markup_");
 
@@ -51,7 +54,7 @@ pub(crate) fn format(source: &str, options: FormatOptions) -> Result<Document, S
 
     template.push_str(&source[cursor..]);
 
-    Ok(Document::template(template, replacements))
+    Document::template(template, replacements)
 }
 
 fn node_document(layout: &Layout<'_>, node: &Node) -> Document {
@@ -110,10 +113,10 @@ fn children_document(
     let mut broken = false;
     let mut previous_end = None;
 
-    for child in children {
+    for (child_index, child) in children.iter().enumerate() {
         let span = child.span();
 
-        let separator = if glue {
+        let separator = if previous_end.is_none() || glue {
             Document::Nil
         } else if broken {
             Document::Hard
@@ -128,11 +131,24 @@ fn children_document(
         };
 
         match child {
+            Child::Text { .. }
+                if (child_index == 0 || child_index + 1 == children.len())
+                    && layout.source[span.start..span.end].trim().is_empty() =>
+            {
+                continue;
+            }
+
             Child::Text { .. } => {
                 let text = text_document(layout, span);
-                content.push(separator);
-                content.push(text.0);
-                glue = text.1;
+
+                content.push(if text.sticky_left {
+                    Document::Line
+                } else {
+                    separator
+                });
+
+                content.push(text.document);
+                glue = text.sticky_right;
                 broken = false;
             }
 
@@ -183,7 +199,10 @@ fn children_document(
             },
             Document::literal(">"),
         ])),
-        Document::indent(Document::concatenate(content)),
+        Document::indent(Document::concatenate([
+            Document::Hard,
+            Document::group(Document::concatenate(content)),
+        ])),
         before_closing,
         Document::literal(closing),
     ]))
@@ -303,7 +322,11 @@ fn hole_document(layout: &Layout<'_>, span: Span) -> Document {
     ])
 }
 
-struct TextDocument(Document, bool);
+struct TextDocument {
+    document: Document,
+    sticky_left: bool,
+    sticky_right: bool,
+}
 
 fn text_document(layout: &Layout<'_>, span: Span) -> TextDocument {
     let raw = &layout.source[span.start..span.end];
@@ -375,5 +398,9 @@ fn text_document(layout: &Layout<'_>, span: Span) -> TextDocument {
         };
     }
 
-    TextDocument(document, sticky_right || sticky_left)
+    TextDocument {
+        document,
+        sticky_left,
+        sticky_right,
+    }
 }

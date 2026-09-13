@@ -1,11 +1,15 @@
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, path::PathBuf};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Request {
     pub(crate) version: u32,
     pub(crate) hook: String,
+
+    #[serde(default)]
+    pub(crate) path: Option<PathBuf>,
+
     pub(crate) source: String,
     pub(crate) configuration: BTreeMap<String, serde_json::Value>,
     pub(crate) settings: Option<serde_json::Value>,
