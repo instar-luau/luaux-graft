@@ -8,7 +8,7 @@ use std::{
 };
 
 fn invoke(request: &[u8]) -> Output {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_luaux-graft"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_graft"))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -67,18 +67,19 @@ fn compiles_react_with_valid_protocol_and_mappings() {
                 usize::try_from(mapping["original_start"].as_u64().unwrap()).unwrap();
 
             let original_end = usize::try_from(mapping["original_end"].as_u64().unwrap()).unwrap();
-            assert_eq!(start, previous);
-            assert_eq!(original_start, previous_original);
+            assert!(start >= previous);
+            assert!(original_start >= previous_original);
             assert!(start < end);
             assert!(original_start < original_end);
-            assert!(generated.get(start..end).is_some());
-            assert!(source.get(original_start..original_end).is_some());
+
+            assert_eq!(
+                generated.get(start..end),
+                source.get(original_start..original_end)
+            );
+
             previous = end;
             previous_original = original_end;
         }
-
-        assert_eq!(previous, generated.len());
-        assert_eq!(previous_original, source.len());
     }
 }
 
@@ -142,9 +143,9 @@ fn formats_markup_with_the_layout_protocol() {
     let output = invoke(
         hook_request(
             "format",
-            "return <Frame Name='shop'/>\n",
-            &json!({}),
-            &json!({"indentation":{"width":4},"spacing":{"braces":true}}),
+            "return (<Frame Name='shop'/>)\n",
+            &json!({"format":{"space_inside_braces":true}}),
+            &json!({"indentation":{"width":4},"spacing":{"braces":false}}),
         )
         .to_string()
         .as_bytes(),
@@ -160,6 +161,7 @@ fn formats_markup_with_the_layout_protocol() {
     assert_eq!(result["version"], 1);
     let document = result["document"].to_string();
     assert!(document.contains("Frame"));
+    assert!(document.contains("template"));
     assert!(document.contains("sequence"));
     assert!(!document.contains("concat"));
     assert!(!document.contains("src"));

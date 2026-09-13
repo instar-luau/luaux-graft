@@ -50,6 +50,7 @@ pub(crate) enum Document {
     Blank,
     Group(Box<Self>),
     Indent(Box<Self>),
+    Dedent(Box<Self>),
 
     #[serde(rename = "sequence")]
     Concatenate(Vec<Self>),
@@ -93,6 +94,10 @@ impl Document {
 
     pub(crate) fn indent(inner: Self) -> Self {
         Self::Indent(Box::new(inner))
+    }
+
+    pub(crate) fn dedent(inner: Self) -> Self {
+        Self::Dedent(Box::new(inner))
     }
 
     pub(crate) fn concatenate(parts: impl IntoIterator<Item = Self>) -> Self {

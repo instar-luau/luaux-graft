@@ -39,8 +39,7 @@ fn run() -> Result<(), Box<dyn Error>> {
                 return Err("expected a protocol 1 format request".into());
             }
 
-            let options =
-                settings::format_options(&request.configuration, request.settings.as_ref())?;
+            let options = settings::format_options(&request.configuration)?;
 
             serde_json::to_vec(&protocol::Format {
                 version: 1,
@@ -85,18 +84,20 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn mappings_cover_original_lines() {
+    fn mappings_cover_only_preserved_luau() {
         let mappings = super::compiler::mappings(
             "-- 雪\r\nreturn <Frame />\n",
             "-- 雪\r\nreturn React.createElement(\"Frame\")\n",
         )
         .unwrap();
 
-        assert_eq!(mappings[0].original_end, "-- 雪\r\n".len());
+        assert!(!mappings.is_empty());
 
-        assert_eq!(
-            mappings[1].original_end - mappings[1].original_start,
-            "return <Frame />\n".len()
-        );
+        for mapping in mappings {
+            assert_eq!(
+                &"-- 雪\r\nreturn React.createElement(\"Frame\")\n"[mapping.start..mapping.end],
+                &"-- 雪\r\nreturn <Frame />\n"[mapping.original_start..mapping.original_end]
+            );
+        }
     }
 }

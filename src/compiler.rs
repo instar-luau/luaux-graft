@@ -60,32 +60,73 @@ pub(crate) fn backend(configuration: &Config) -> Box<dyn Backend> {
 }
 
 pub(crate) fn mappings(source: &str, generated: &str) -> io::Result<Vec<Mapping>> {
-    let mut original_lines = source.split_inclusive('\n');
-    let mut generated_lines = generated.split_inclusive('\n');
-    let mut original_start = 0;
-    let mut generated_start = 0;
+    let original_lines = lines(source);
+    let generated_lines = lines(generated);
+
+    if original_lines.len() != generated_lines.len() {
+        return Err(io::Error::other("LuauX changed the source line count"));
+    }
+
+    let mut generated_cursors = generated_lines
+        .iter()
+        .map(|(start, _)| *start)
+        .collect::<Vec<_>>();
+
     let mut mappings = Vec::new();
 
-    loop {
-        match (original_lines.next(), generated_lines.next()) {
-            (Some(original), Some(generated)) => {
-                let generated_end = generated_start + generated.len();
+    for (range_start, range_end) in crate::source::luau_ranges(source).map_err(io::Error::other)? {
+        for (line, ((original_start, original_end), (generated_start, generated_end))) in
+            original_lines.iter().zip(&generated_lines).enumerate()
+        {
+            let start = range_start.max(*original_start);
+            let end = range_end.min(*original_end);
 
-                mappings.push(Mapping {
-                    start: generated_start,
-                    end: generated_end,
-                    original_start,
-                    original_end: original_start + original.len(),
-                });
-
-                generated_start = generated_end;
-                original_start += original.len();
+            if start >= end {
+                continue;
             }
 
-            (None, None) => return Ok(mappings),
-            _ => return Err(io::Error::other("LuauX changed the source line count")),
+            let (start, end) = crate::source::trimmed(source, start, end);
+
+            if start == end {
+                continue;
+            }
+
+            let text = &source[start..end];
+            let search_start = generated_cursors[line].max(*generated_start);
+
+            let Some(relative) = generated[search_start..*generated_end].find(text) else {
+                continue;
+            };
+
+            let generated_match = search_start + relative;
+            let generated_match_end = generated_match + text.len();
+
+            mappings.push(Mapping {
+                start: generated_match,
+                end: generated_match_end,
+                original_start: start,
+                original_end: end,
+            });
+
+            generated_cursors[line] = generated_match_end;
         }
     }
+
+    Ok(mappings)
+}
+
+fn lines(source: &str) -> Vec<(usize, usize)> {
+    let mut start = 0;
+
+    source
+        .split_inclusive('\n')
+        .map(|line| {
+            let range = (start, start + line.len());
+            start = range.1;
+
+            range
+        })
+        .collect()
 }
 
 fn diagnostic(source: &str, offset: usize, message: &str, help: Option<&str>) -> String {

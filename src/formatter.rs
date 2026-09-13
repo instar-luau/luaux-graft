@@ -27,9 +27,25 @@ pub(crate) fn format(source: &str, options: FormatOptions) -> Result<Document, S
     for Segment { node, start, end } in &file.segments {
         template.push_str(&source[cursor..*start]);
 
+        let before = &source[..*start];
+        let after = &source[*end..];
+        let parenthesized = before.trim_end().ends_with('(') && after.trim_start().starts_with(')');
         let marker = format!("{prefix}{}__", replacements.len());
         template.push_str(&marker);
-        replacements.push((marker, node_document(&layout, node)));
+
+        let document = node_document(&layout, node);
+
+        let document = if parenthesized {
+            Document::indent(Document::concatenate([
+                Document::Hard,
+                document,
+                Document::dedent(Document::Hard),
+            ]))
+        } else {
+            document
+        };
+
+        replacements.push((marker, document));
         cursor = *end;
     }
 
@@ -270,6 +286,12 @@ fn hole_document(layout: &Layout<'_>, span: Span) -> Document {
         Some(crate::source::RangeKind::Markup(node)) => node_document(layout, &node),
         Some(crate::source::RangeKind::Luau) => Document::expression(start, end),
         None => Document::source(start, end),
+    };
+
+    let body = if layout.source[start..end].contains('\n') {
+        Document::dedent(Document::dedent(body))
+    } else {
+        body
     };
 
     Document::concatenate([

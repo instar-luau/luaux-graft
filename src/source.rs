@@ -45,6 +45,97 @@ pub(crate) fn trimmed(source: &str, start: usize, end: usize) -> (usize, usize) 
     }
 }
 
+pub(crate) fn luau_ranges(source: &str) -> Result<Vec<(usize, usize)>, String> {
+    let mut parsed = source.as_bytes().to_vec();
+    let mut index = 0;
+
+    while let Some(relative) = parsed[index..].iter().position(|byte| *byte == b'{') {
+        let opening = index + relative;
+        let mut spread_start = opening + 1;
+
+        while parsed
+            .get(spread_start)
+            .is_some_and(|byte| matches!(byte, b' ' | b'\t'))
+        {
+            spread_start += 1;
+        }
+
+        if parsed.get(spread_start..spread_start + 3) == Some(b"...") {
+            parsed[spread_start..spread_start + 3].fill(b' ');
+        }
+
+        index = opening + 1;
+    }
+
+    let parsed = String::from_utf8(parsed).map_err(|error| error.to_string())?;
+    let tree = vermis::parse_luaux(parsed.as_bytes().into());
+
+    if let Some(diagnostic) = tree.diagnostics.first() {
+        return Err(format!(
+            "byte {}: {}",
+            diagnostic.span.start, diagnostic.message
+        ));
+    }
+
+    let mut markup = tree
+        .nodes
+        .iter()
+        .filter(|node| matches!(node.kind, Kind::Element | Kind::Fragment))
+        .map(|node| (node.span.start, node.span.end))
+        .collect::<Vec<_>>();
+
+    markup.sort_unstable();
+
+    let mut outer_markup = Vec::new();
+
+    for (start, end) in markup {
+        if outer_markup
+            .last()
+            .is_none_or(|(_, previous_end)| start >= *previous_end)
+        {
+            outer_markup.push((start, end));
+        }
+    }
+
+    let mut ranges = Vec::new();
+    let mut cursor = 0;
+
+    for (start, end) in outer_markup {
+        if cursor < start {
+            ranges.push((cursor, start));
+        }
+
+        cursor = end;
+    }
+
+    if cursor < source.len() {
+        ranges.push((cursor, source.len()));
+    }
+
+    for node in tree
+        .nodes
+        .iter()
+        .filter(|node| node.kind == Kind::MarkupExpression)
+    {
+        for child in tree
+            .children
+            .get(node.children.clone())
+            .into_iter()
+            .flatten()
+            .filter_map(|index| tree.nodes.get(*index))
+        {
+            if child.kind != Kind::Error {
+                ranges.push((child.span.start, child.span.end));
+            }
+        }
+    }
+
+    ranges.sort_unstable();
+    ranges.retain(|(start, end)| start < end);
+
+    Ok(ranges)
+}
+
 pub(crate) fn parse_range(source: &str, start: usize, end: usize) -> Option<RangeKind> {
     if start == end {
         return Some(RangeKind::Luau);

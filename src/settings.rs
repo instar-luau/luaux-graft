@@ -38,25 +38,16 @@ impl Default for FormatOptions {
             self_closing_space: true,
             text_wrap: TextWrap::Fill,
             blank_lines: true,
-            space_inside_braces: true,
+            space_inside_braces: false,
         }
     }
 }
 
 pub(crate) fn format_options(
     configuration: &BTreeMap<String, Value>,
-    settings: Option<&Value>,
 ) -> Result<FormatOptions, String> {
     let mut options = FormatOptions::default();
     let mut values = Map::new();
-
-    if let Some(settings) = settings.and_then(Value::as_object)
-        && let Some(braces) = settings
-            .get("spacing")
-            .and_then(|spacing| spacing.get("braces"))
-    {
-        values.insert("space_inside_braces".into(), braces.clone());
-    }
 
     let own = configuration
         .get("format")
