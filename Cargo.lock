@@ -187,7 +187,7 @@ dependencies = [
 
 [[package]]
 name = "luaux-graft"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "luaux",
  "serde",
