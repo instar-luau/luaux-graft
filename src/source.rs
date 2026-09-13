@@ -1,59 +1,20 @@
 use luaux::markup::{Node as LuauxNode, Span, parse_node};
 use vermis::{Kind, Tree};
 
-pub(crate) struct SourceFile<'source> {
-    tree: Tree<'source>,
+pub(crate) struct SourceFile {
     pub(crate) segments: Vec<Segment>,
     pub(crate) hole_starts: Vec<usize>,
 }
 
-pub(crate) enum Segment {
-    Luau {
-        start: usize,
-    },
-
-    Markup {
-        node: LuauxNode,
-        start: usize,
-        end: usize,
-    },
+pub(crate) struct Segment {
+    pub(crate) node: LuauxNode,
+    pub(crate) start: usize,
+    pub(crate) end: usize,
 }
 
-impl SourceFile<'_> {
-    pub(crate) fn statement_ranges(&self) -> Vec<(usize, usize)> {
-        let Some(root) = self.tree.nodes.get(self.tree.root) else {
-            return Vec::new();
-        };
-
-        let Some(&block_index) = self
-            .tree
-            .children
-            .get(root.children.clone())
-            .and_then(|children| children.first())
-        else {
-            return Vec::new();
-        };
-
-        let Some(block) = self.tree.nodes.get(block_index) else {
-            return Vec::new();
-        };
-
-        self.tree
-            .children
-            .get(block.children.clone())
-            .into_iter()
-            .flatten()
-            .filter_map(|index| self.tree.nodes.get(*index))
-            .filter(|node| node.kind != Kind::Error)
-            .map(|node| (node.span.start, node.span.end))
-            .collect()
-    }
-
+impl SourceFile {
     pub(crate) fn markup_nodes(&self) -> impl Iterator<Item = &LuauxNode> {
-        self.segments.iter().filter_map(|segment| match segment {
-            Segment::Markup { node, .. } => Some(node),
-            Segment::Luau { .. } => None,
-        })
+        self.segments.iter().map(|segment| &segment.node)
     }
 }
 
@@ -101,7 +62,7 @@ pub(crate) fn parse_range(source: &str, start: usize, end: usize) -> Option<Rang
         .then_some(RangeKind::Luau)
 }
 
-pub(crate) fn parse(source: &str) -> Result<SourceFile<'_>, String> {
+pub(crate) fn parse(source: &str) -> Result<SourceFile, String> {
     let tree = vermis::parse_luaux(source.as_bytes().into());
 
     if let Some(diagnostic) = tree.diagnostics.first() {
@@ -114,30 +75,7 @@ pub(crate) fn parse(source: &str) -> Result<SourceFile<'_>, String> {
     let mut markup = Vec::new();
     collect_markup(&tree, source, tree.root, &mut markup)?;
 
-    markup.sort_by_key(|segment: &Segment| match segment {
-        Segment::Markup { start, .. } | Segment::Luau { start, .. } => *start,
-    });
-
-    let mut segments = Vec::new();
-    let mut cursor = 0;
-
-    for segment in markup {
-        let (start, end) = match &segment {
-            Segment::Markup { start, end, .. } => (*start, *end),
-            Segment::Luau { .. } => continue,
-        };
-
-        if cursor < start {
-            segments.push(Segment::Luau { start: cursor });
-        }
-
-        segments.push(segment);
-        cursor = end;
-    }
-
-    if cursor < source.len() {
-        segments.push(Segment::Luau { start: cursor });
-    }
+    markup.sort_by_key(|segment| segment.start);
 
     let hole_starts = tree
         .nodes
@@ -147,8 +85,7 @@ pub(crate) fn parse(source: &str) -> Result<SourceFile<'_>, String> {
         .collect();
 
     Ok(SourceFile {
-        tree,
-        segments,
+        segments: markup,
         hole_starts,
     })
 }
@@ -167,7 +104,7 @@ fn collect_markup(
         let (markup_node, end) =
             parse_node(source, node.span.start).map_err(|error| error.message)?;
 
-        markup.push(Segment::Markup {
+        markup.push(Segment {
             node: markup_node,
             start: node.span.start,
             end,

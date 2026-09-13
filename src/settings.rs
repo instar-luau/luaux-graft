@@ -13,7 +13,6 @@ pub(crate) struct FormatOptions {
     pub(crate) self_closing_space: bool,
     pub(crate) text_wrap: TextWrap,
     pub(crate) blank_lines: bool,
-    pub(crate) indent_width: usize,
     pub(crate) space_inside_braces: bool,
 }
 
@@ -39,7 +38,6 @@ impl Default for FormatOptions {
             self_closing_space: true,
             text_wrap: TextWrap::Fill,
             blank_lines: true,
-            indent_width: 4,
             space_inside_braces: true,
         }
     }
@@ -52,20 +50,12 @@ pub(crate) fn format_options(
     let mut options = FormatOptions::default();
     let mut values = Map::new();
 
-    if let Some(settings) = settings.and_then(Value::as_object) {
-        if let Some(width) = settings
-            .get("indentation")
-            .and_then(|indentation| indentation.get("width"))
-        {
-            values.insert("indent_width".into(), width.clone());
-        }
-
-        if let Some(braces) = settings
+    if let Some(settings) = settings.and_then(Value::as_object)
+        && let Some(braces) = settings
             .get("spacing")
             .and_then(|spacing| spacing.get("braces"))
-        {
-            values.insert("space_inside_braces".into(), braces.clone());
-        }
+    {
+        values.insert("space_inside_braces".into(), braces.clone());
     }
 
     let own = configuration
@@ -104,15 +94,6 @@ pub(crate) fn format_options(
             "attribute_per_line" => options.attribute_per_line = boolean(&name, &value)?,
             "self_closing_space" => options.self_closing_space = boolean(&name, &value)?,
             "blank_lines" => options.blank_lines = boolean(&name, &value)?,
-
-            "indent_width" => {
-                options.indent_width = value
-                    .as_u64()
-                    .and_then(|value| usize::try_from(value).ok())
-                    .filter(|value| *value > 0)
-                    .ok_or_else(|| "indent_width must be a positive integer".to_string())?;
-            }
-
             "space_inside_braces" => options.space_inside_braces = boolean(&name, &value)?,
             _ => {}
         }

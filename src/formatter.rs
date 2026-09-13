@@ -14,91 +14,28 @@ struct Layout<'source> {
 pub(crate) fn format(source: &str, options: FormatOptions) -> Result<Document, String> {
     let file = source::parse(source)?;
     let layout = Layout { source, options };
+    let mut prefix = String::from("__luaux_markup_");
 
-    let markup = file
-        .segments
-        .iter()
-        .filter_map(|segment| match segment {
-            Segment::Markup { start, end, .. } => Some((*start, *end)),
-            Segment::Luau { .. } => None,
-        })
-        .collect::<Vec<_>>();
+    while source.contains(&prefix) {
+        prefix.push('_');
+    }
 
-    let statements = file
-        .statement_ranges()
-        .into_iter()
-        .filter(|(start, end)| !markup.iter().any(|(from, to)| *from < *end && *start < *to))
-        .collect::<Vec<_>>();
-
-    let mut parts = Vec::new();
+    let mut template = String::new();
+    let mut replacements = Vec::new();
     let mut cursor = 0;
 
-    for (start, end) in statements {
-        if start < cursor || end > source.len() {
-            continue;
-        }
+    for Segment { node, start, end } in &file.segments {
+        template.push_str(&source[cursor..*start]);
 
-        append_markup(&layout, cursor, start, &file.segments, &mut parts);
-        parts.push(Document::host(start, end));
-        cursor = end;
+        let marker = format!("{prefix}{}__", replacements.len());
+        template.push_str(&marker);
+        replacements.push((marker, node_document(&layout, node)));
+        cursor = *end;
     }
 
-    append_markup(&layout, cursor, source.len(), &file.segments, &mut parts);
+    template.push_str(&source[cursor..]);
 
-    Ok(Document::concatenate(parts))
-}
-
-fn append_markup(
-    layout: &Layout<'_>,
-    start: usize,
-    end: usize,
-    segments: &[Segment],
-    parts: &mut Vec<Document>,
-) {
-    let mut cursor = start;
-
-    for segment in segments {
-        let Segment::Markup {
-            node,
-            start: markup_start,
-            end: markup_end,
-        } = segment
-        else {
-            continue;
-        };
-
-        if *markup_start < start || *markup_end > end {
-            continue;
-        }
-
-        if cursor < *markup_start {
-            parts.push(Document::source(cursor, *markup_start));
-        }
-
-        parts.push(indented(layout, *markup_start, node_document(layout, node)));
-        cursor = *markup_end;
-    }
-
-    if cursor < end {
-        parts.push(Document::source(cursor, end));
-    }
-}
-
-fn indented(layout: &Layout<'_>, start: usize, mut document: Document) -> Document {
-    let line_start = layout.source[..start]
-        .rfind('\n')
-        .map_or(0, |index| index + 1);
-
-    let indentation = &layout.source[line_start..start];
-
-    let levels = indentation.matches('\t').count()
-        + indentation.matches(' ').count() / layout.options.indent_width.max(1);
-
-    for _ in 0..levels {
-        document = Document::indent(document);
-    }
-
-    document
+    Ok(Document::template(template, replacements))
 }
 
 fn node_document(layout: &Layout<'_>, node: &Node) -> Document {

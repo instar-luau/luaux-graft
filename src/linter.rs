@@ -125,7 +125,7 @@ fn node_span(node: &Node) -> luaux::markup::Span {
     }
 }
 
-fn compiler_finding(source: &str, file: &SourceFile<'_>, warning: &Warning) -> Finding {
+fn compiler_finding(source: &str, file: &SourceFile, warning: &Warning) -> Finding {
     let rule = if warning.message.contains("built once") {
         "static_conditional_child"
     } else {
@@ -148,7 +148,7 @@ fn compiler_finding(source: &str, file: &SourceFile<'_>, warning: &Warning) -> F
     }
 }
 
-fn error_finding(source: &str, file: &SourceFile<'_>, error: &CompileError) -> Finding {
+fn error_finding(source: &str, file: &SourceFile, error: &CompileError) -> Finding {
     let (start, end) = locate(source, file, error.offset, error.length, &error.message);
 
     Finding {
@@ -161,7 +161,7 @@ fn error_finding(source: &str, file: &SourceFile<'_>, error: &CompileError) -> F
 
 fn locate(
     source: &str,
-    file: &SourceFile<'_>,
+    file: &SourceFile,
     offset: usize,
     length: usize,
     message: &str,

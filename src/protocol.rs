@@ -59,12 +59,22 @@ pub(crate) enum Document {
         end: u32,
         parse: ParseMode,
     },
+
+    Template {
+        source: String,
+        replacements: Vec<Replacement>,
+    },
+}
+
+#[derive(Clone, Serialize)]
+pub(crate) struct Replacement {
+    marker: String,
+    document: Document,
 }
 
 #[derive(Clone, Copy, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum ParseMode {
-    Block,
     Expression,
 }
 
@@ -89,11 +99,16 @@ impl Document {
         Self::Concatenate(parts.into_iter().collect())
     }
 
-    pub(crate) fn host(start: usize, end: usize) -> Self {
-        Self::Host {
-            start: offset(start),
-            end: offset(end),
-            parse: ParseMode::Block,
+    pub(crate) fn template(
+        source: String,
+        replacements: impl IntoIterator<Item = (String, Self)>,
+    ) -> Self {
+        Self::Template {
+            source,
+            replacements: replacements
+                .into_iter()
+                .map(|(marker, document)| Replacement { marker, document })
+                .collect(),
         }
     }
 
