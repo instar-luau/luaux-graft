@@ -3,4 +3,6 @@ name = "luaux"
 version = "0.2.0"
 protocol = 1
 runtime = "native"
+format = true
+lint = true
 compile = true

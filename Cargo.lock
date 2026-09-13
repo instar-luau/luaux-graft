@@ -34,6 +34,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6bb31b46c14244e20ee9984b11bf5c992b91fb6939fea616e3512c8baecdbe5f"
 dependencies = [
  "memchr",
+ "regex-automata",
  "serde_core",
 ]
 
@@ -192,6 +193,7 @@ dependencies = [
  "serde",
  "serde_json",
  "toml",
+ "vermis",
 ]
 
 [[package]]
@@ -386,6 +388,15 @@ name = "unicode-xid"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
+
+[[package]]
+name = "vermis"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "088532bdc240c3e36432999f263b84a58fd0de827e45e06fab9893599eb73773"
+dependencies = [
+ "bstr",
+]
 
 [[package]]
 name = "winnow"

@@ -1,6 +1,7 @@
 //! Protocol integration tests.
 
 use serde_json::{Value, json};
+
 use std::{
     io::Write,
     process::{Command, Output, Stdio},
@@ -20,7 +21,11 @@ fn invoke(request: &[u8]) -> Output {
 }
 
 fn request(source: &str, configuration: &Value) -> Value {
-    json!({"version":1,"hook":"compile","source":source,"configuration":configuration,"settings":null})
+    hook_request("compile", source, configuration, &Value::Null)
+}
+
+fn hook_request(hook: &str, source: &str, configuration: &Value, settings: &Value) -> Value {
+    json!({"version":1,"hook":hook,"source":source,"configuration":configuration,"settings":settings})
 }
 
 #[test]
@@ -102,7 +107,7 @@ fn failures_leave_standard_output_empty() {
     let mut invalid_version = request("return 1", &json!({}));
     invalid_version["version"] = json!(2);
     let mut invalid_hook = request("return 1", &json!({}));
-    invalid_hook["hook"] = json!("format");
+    invalid_hook["hook"] = json!("unknown");
     let mut invalid_settings = request("return 1", &json!({}));
     invalid_settings["settings"] = json!({});
 
@@ -125,4 +130,55 @@ fn failures_leave_standard_output_empty() {
         assert_eq!(output.stdout, Vec::<u8>::new());
         assert_ne!(output.stderr, Vec::<u8>::new());
     }
+}
+
+#[test]
+fn formats_markup_with_the_layout_protocol() {
+    let output = invoke(
+        hook_request(
+            "format",
+            "return <Frame Name='shop'/>\n",
+            &json!({}),
+            &json!({"indentation":{"width":4},"spacing":{"braces":true}}),
+        )
+        .to_string()
+        .as_bytes(),
+    );
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["version"], 1);
+    assert!(result["document"].to_string().contains("Frame"));
+}
+
+#[test]
+fn lints_markup_with_source_ranges() {
+    let output = invoke(
+        hook_request(
+            "lint",
+            "return <Frame Name=\"a\" Name=\"b\"/>\n",
+            &json!({}),
+            &Value::Null,
+        )
+        .to_string()
+        .as_bytes(),
+    );
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+
+    assert!(result.as_array().unwrap().iter().any(|finding| {
+        finding["rule"] == "duplicate_attribute"
+            && finding["start"].as_u64().unwrap() < finding["end"].as_u64().unwrap()
+    }));
 }

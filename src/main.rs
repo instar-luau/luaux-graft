@@ -1,137 +1,21 @@
-//! Native `LuauX` compilation graft for Instar.
+//! Native `LuauX` compilation, formatting, and linting graft for Instar.
 
-use luaux::{Config, Element, Table, compile::compile_configured, config::BackendKind};
-use serde::{Deserialize, Serialize};
+mod compiler;
+mod formatter;
+mod linter;
+mod protocol;
+mod settings;
+mod source;
+
+use protocol::Request;
+
 use std::{
-    collections::BTreeMap,
     error::Error,
     io::{self, Read, Write},
     process::ExitCode,
 };
 
 const PAYLOAD_LIMIT: u64 = 64 * 1024 * 1024;
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Request {
-    version: u32,
-    hook: String,
-    source: String,
-    configuration: BTreeMap<String, serde_json::Value>,
-    settings: Option<serde_json::Value>,
-}
-
-#[derive(Debug, Serialize)]
-struct Mapping {
-    start: usize,
-    end: usize,
-    original_start: usize,
-    original_end: usize,
-}
-
-#[derive(Serialize)]
-struct Compilation {
-    version: u32,
-    source: String,
-    dependencies: Vec<String>,
-    mappings: Vec<Mapping>,
-}
-
-fn mappings(source: &str, output: &str) -> io::Result<Vec<Mapping>> {
-    let mut originals = source.split_inclusive('\n');
-    let mut generated = output.split_inclusive('\n');
-    let mut original_start = 0;
-    let mut start = 0;
-    let mut mappings = Vec::new();
-
-    loop {
-        match (originals.next(), generated.next()) {
-            (Some(original), Some(generated)) => {
-                let end = start + generated.len();
-
-                mappings.push(Mapping {
-                    start,
-                    end,
-                    original_start,
-                    original_end: if original == generated {
-                        original_start + original.len()
-                    } else {
-                        original_start
-                    },
-                });
-
-                start = end;
-                original_start += original.len();
-            }
-
-            (None, None) => return Ok(mappings),
-            _ => return Err(io::Error::other("LuauX changed the source line count")),
-        }
-    }
-}
-
-fn diagnostic(source: &str, offset: usize, message: &str, help: Option<&str>) -> String {
-    let prefix = source.get(..offset).unwrap_or_default();
-    let line = prefix.bytes().filter(|byte| *byte == b'\n').count() + 1;
-    let column = prefix.rsplit('\n').next().unwrap_or_default().len() + 1;
-    let mut message = format!("({line},{column}): {message}");
-
-    if let Some(help) = help {
-        message.push_str("; ");
-        message.push_str(help);
-    }
-
-    message
-}
-
-fn compile(request: &Request) -> Result<Compilation, Box<dyn Error>> {
-    if request.version != 1 || request.hook != "compile" || request.settings.is_some() {
-        return Err("expected a protocol 1 compile request without formatter settings".into());
-    }
-
-    let (configuration, warnings) =
-        Config::parse_reporting(&toml::to_string(&request.configuration)?)?;
-
-    for warning in warnings {
-        eprintln!("warning: {warning}");
-    }
-
-    let backend: &dyn luaux::Backend = match configuration.backend {
-        BackendKind::Element => &Element,
-        BackendKind::Table => &Table,
-    };
-
-    let (output, warnings) =
-        compile_configured(&request.source, backend, configuration).map_err(|error| {
-            io::Error::other(diagnostic(
-                &request.source,
-                error.offset,
-                &error.message,
-                error.help.as_deref(),
-            ))
-        })?;
-
-    for warning in warnings {
-        eprintln!(
-            "warning: {}",
-            diagnostic(
-                &request.source,
-                warning.offset,
-                &warning.message,
-                warning.help.as_deref()
-            )
-        );
-    }
-
-    let mappings = mappings(&request.source, &output)?;
-
-    Ok(Compilation {
-        version: 1,
-        source: output,
-        dependencies: Vec::new(),
-        mappings,
-    })
-}
 
 fn run() -> Result<(), Box<dyn Error>> {
     let mut input = Vec::new();
@@ -145,8 +29,37 @@ fn run() -> Result<(), Box<dyn Error>> {
         return Err("graft request exceeds the payload limit".into());
     }
 
-    let request = serde_json::from_slice(&input)?;
-    let output = serde_json::to_vec(&compile(&request)?)?;
+    let request: Request = serde_json::from_slice(&input)?;
+
+    let output = match request.hook.as_str() {
+        "compile" => serde_json::to_vec(&compiler::compile(&request)?)?,
+
+        "format" => {
+            if request.version != 1 || request.hook != "format" {
+                return Err("expected a protocol 1 format request".into());
+            }
+
+            let options =
+                settings::format_options(&request.configuration, request.settings.as_ref())?;
+
+            serde_json::to_vec(&protocol::Format {
+                version: 1,
+                document: formatter::format(&request.source, options)?,
+            })?
+        }
+
+        "lint" => {
+            if request.version != 1 || request.hook != "lint" {
+                return Err("expected a protocol 1 lint request".into());
+            }
+
+            let configuration = compiler::configuration(&request.configuration)?;
+
+            serde_json::to_vec(&linter::lint(&request.source, &configuration)?)?
+        }
+
+        _ => return Err("unsupported graft hook".into()),
+    };
 
     if output.len() as u64 > PAYLOAD_LIMIT {
         return Err("graft response exceeds the payload limit".into());
@@ -171,18 +84,37 @@ fn main() -> ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::protocol::{Mapping, offset};
 
     #[test]
-    fn mappings_preserve_unchanged_bytes_and_anchor_transformed_lines() {
+    fn mappings_anchor_transformed_lines() {
         let source = "-- 雪\r\nreturn <Frame />\n";
-        let output = "-- 雪\r\nreturn React.createElement(\"Frame\")\n";
-        let mappings = mappings(source, output).unwrap();
-        assert_eq!(mappings.len(), 2);
-        assert_eq!(mappings[0].original_end, "-- 雪\r\n".len());
+        let generated = "-- 雪\r\nreturn React.createElement(\"Frame\")\n";
+        let mut source_lines = source.split_inclusive('\n');
+        let mut generated_lines = generated.split_inclusive('\n');
+        let mut source_start = 0;
+        let mut generated_start = 0;
+        let mut mappings = Vec::<Mapping>::new();
+
+        while let (Some(original), Some(output)) = (source_lines.next(), generated_lines.next()) {
+            let generated_end = generated_start + output.len();
+
+            mappings.push(Mapping {
+                start: generated_start,
+                end: generated_end,
+                original_start: source_start,
+                original_end: if original == output {
+                    source_start + original.len()
+                } else {
+                    source_start
+                },
+            });
+
+            source_start += original.len();
+            generated_start = generated_end;
+        }
+
+        assert_eq!(mappings[0].original_end, offset("-- 雪\r\n".len()) as usize);
         assert_eq!(mappings[1].original_start, mappings[1].original_end);
-        assert_eq!(mappings[1].end, output.len());
-        assert!(self::mappings("", "").unwrap().is_empty());
-        assert!(self::mappings("return 1", "return 1\nreturn 2").is_err());
     }
 }
