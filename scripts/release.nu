@@ -42,13 +42,15 @@ def "main build" [
     cp --preserve [mode] ($build_directory | path join $source_binary) ($staging | path join $binary)
 
     try {
-        cd $staging
+        do {
+            cd $staging
 
-        if $windows {
-            let command = $"Compress-Archive -Path instar.toml,($binary) -DestinationPath '($archive)' -Force"
-            pwsh -NoProfile -Command $command
-        } else {
-            ^zip -q -r $archive instar.toml $binary
+            if $windows {
+                let command = $"Compress-Archive -Path instar.toml,($binary) -DestinationPath '($archive)' -Force"
+                pwsh -NoProfile -Command $command
+            } else {
+                ^zip -q -r $archive instar.toml $binary
+            }
         }
     } catch {|error| error make $error }
 
