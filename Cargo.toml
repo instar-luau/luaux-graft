@@ -1,12 +1,17 @@
 [package]
 name = "luaux-graft"
-version = "0.2.0"
+version = "0.1.0"
 edition = "2024"
 description = "Native LuauX compilation graft for Instar"
 repository = "https://github.com/instar-luau/instar"
 license = "MIT"
 keywords = ["formatter", "linter", "luau", "luaux", "roblox"]
 categories = ["compilers", "development-tools"]
+
+[package.metadata.release]
+publish = false
+tag-name = "v{{version}}"
+pre-release-commit-message = "chore(release): release v{{version}}"
 
 [dependencies]
 luaux = "0.2.0"
