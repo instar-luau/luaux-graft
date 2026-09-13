@@ -52,6 +52,7 @@ def "main build" [
         }
     } catch {|error| error make $error }
 
+    cd $destination
     rm --recursive --force $staging
 }
 
