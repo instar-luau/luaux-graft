@@ -26,8 +26,6 @@ def "main build" [
 
     let windows = $target ends-with windows-msvc
 
-    let source_binary = if $windows { "luaux-graft.exe" } else { "luaux-graft" }
-
     let binary = if $windows { "graft.exe" } else { "graft" }
 
     let build_directory = $"target/($target)/release"
@@ -39,7 +37,7 @@ def "main build" [
     mkdir $staging
 
     cp graft.toml ($staging | path join graft.toml)
-    cp --preserve [mode] ($build_directory | path join $source_binary) ($staging | path join $binary)
+    cp --preserve [mode] ($build_directory | path join $binary) ($staging | path join $binary)
 
     try {
         cd $staging
